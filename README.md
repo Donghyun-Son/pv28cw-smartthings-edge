@@ -7,7 +7,7 @@ SmartThings Edge LAN driver for the Tuya PV28-CW air quality sensor (Tuya protoc
 
 ## 지원 항목
 
-- 공기질, 이산화탄소 농도, PM 1.0, PM 2.5, PM 10, 휘발성 유기화합물(TVOC), 포름알데히드
+- 공기질, 이산화탄소 농도, PM 1.0, PM 2.5, PM 10, 휘발성 유기화합물(TVOC), 포름알데히드(HCHO)
 - 온도, 습도, 배터리
 - 센서 설정: 경보음, 이산화탄소 농도·PM 2.5 경보 기준, 화면 자동 꺼짐
 
@@ -17,17 +17,17 @@ SmartThings Edge LAN driver for the Tuya PV28-CW air quality sensor (Tuya protoc
 
 - SmartThings 허브 (센서와 같은 네트워크)
 - Smart Life 또는 Tuya Smart 앱에 등록된 PV28-CW
-- 센서의 IP 주소, Device ID, Local Key
+- 센서의 IP 주소, Local Key
 
 ## 설치
 
 1. [채널 초대 링크](https://bestow-regional.api.smartthings.com/invite/VbMbQYdZoKjB)에서 허브를 등록하고 **PV28-CW Tuya LAN** 드라이버를 설치합니다.
 2. SmartThings 앱 → 기기 추가 → **주변 기기 검색**을 누르면 "공기질 센서"가 추가됩니다.
-3. 추가된 기기의 설정에 IP 주소, Device ID, Local Key를 입력합니다.
+3. 추가된 기기의 설정에 IP 주소와 Local Key를 입력합니다.
 
 잠시 뒤 값이 들어오기 시작합니다.
 
-## Device ID, Local Key 확인
+## Local Key 확인
 
 [tuyawizard](https://github.com/3735943886/tuyawizard)를 쓰면 Tuya 개발자 계정 없이 Smart Life 앱 로그인만으로 확인할 수 있습니다.
 
@@ -36,7 +36,7 @@ SmartThings Edge LAN driver for the Tuya PV28-CW air quality sensor (Tuya protoc
    - Windows: [Releases](https://github.com/3735943886/tuyawizard/releases/latest)에서 `tuyawizard-windows.zip`을 받아 `tuyawizard.exe` 실행
    - 그 외: `pip install tuyawizard cryptography` 후 `python -m tuyawizard`
 3. 사용자 코드를 입력하고, 화면에 나온 QR 코드를 Smart Life 앱으로 스캔합니다.
-4. 만들어진 `tuyadevices.json`에서 센서의 `id`가 Device ID, `local_key`가 Local Key입니다.
+4. 만들어진 `tuyadevices.json`에서 센서 항목의 `local_key`가 Local Key입니다.
 
 IP 주소는 공유기 관리 페이지에서 확인하고, 바뀌지 않게 고정(DHCP 예약)해 두세요.
 `tuyadevices.json`의 `ip`는 외부 IP라서 쓸 수 없습니다.
@@ -58,8 +58,9 @@ IP 주소는 공유기 관리 페이지에서 확인하고, 바뀌지 않게 고
 
 ## 문제 해결
 
-- **오프라인으로 나올 때**: IP 주소가 바뀌지 않았는지, Device ID와 Local Key가 맞는지 확인하세요.
+- **오프라인으로 나올 때**: IP 주소가 바뀌지 않았는지, Local Key가 맞는지 확인하세요. 로그에 어느 설정이 잘못됐는지 나옵니다.
 - **기기가 추가되지 않을 때**: 드라이버가 허브에 설치됐는지 확인하고 주변 기기 검색을 다시 해 보세요. 설정을 입력하지 않은 기기가 이미 있으면 새로 만들지 않습니다.
+- **센서 설정이 반영되지 않을 때**: 센서에 연결되지 않은 동안 바꾼 설정은 연결되는 대로 씁니다. 센서가 받지 않으면 로그에 "센서 설정 쓰기 실패"가 남습니다.
 - **로그**: [SmartThings CLI](https://github.com/SmartThingsCommunity/smartthings-cli)로 `smartthings edge:drivers:logcat`을 실행하면 볼 수 있습니다.
 
 ## 개발

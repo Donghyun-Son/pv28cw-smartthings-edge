@@ -1,6 +1,6 @@
 -- PV28-CW (Tuya co2bj / yrr3eiyiacm31ski) DP → SmartThings capability 변환.
 -- SmartThings 라이브러리에 의존하지 않는 순수 함수만 둔다 (tests/test_driver.py에서 직접 검증).
--- DP 표 근거: README.md "진단 결과" (2026-11-06 실기 관측, 앱 값 대조)
+-- DP 표 근거: docs/development.md "DP" (2026-11-06 실기 관측, 앱 값 대조)
 
 local M = {}
 
@@ -15,7 +15,9 @@ M.MEASUREMENTS = {
   { dp = "20", cap = "dustSensor", attr = "fineDustLevel", unit = UG },
   { dp = "101", cap = "dustSensor", attr = "dustLevel", unit = UG },
   { dp = "102", cap = "veryFineDustSensor", attr = "veryFineDustLevel", unit = UG }, -- 코드명은 pm25지만 실제 PM1.0
-  { dp = "21", cap = "tvocMeasurement", attr = "tvocLevel", unit = "ug/m3" },      -- 원시값 = μg/m³ (mg/m³ x1000)
+  -- 원시값 = μg/m³ (mg/m³ x1000). tvocMeasurement 단위는 ppm/ppb/ug/m3뿐이라 HCHO처럼 mg/m^3로 쓸 수 없다
+  { dp = "21", cap = "tvocMeasurement", attr = "tvocLevel", unit = "ug/m3" },
+  -- HCHO. formaldehydeMeasurement 단위는 ppm/mg/m^3뿐이다
   { dp = "22", cap = "formaldehydeMeasurement", attr = "formaldehydeLevel", unit = "mg/m^3", scale = 1000 },
   { dp = "15", cap = "battery", attr = "battery" },
 }
@@ -92,7 +94,8 @@ M.SETTINGS = {
   screenSleep = { dp = "108", bool = true },
 }
 
---- preference 값을 기기가 받는 DP 값으로 바꾼다 (범위·단위 맞춤).
+--- preference 값을 기기가 받는 DP 값으로 바꾼다.
+-- 숫자 설정은 목록(enumeration) 문자열로 오지만, 예전 정수 설정 값도 범위·단위에 맞춰 받는다.
 function M.setting_value(spec, value)
   if spec.bool then return value == true end
   local v = math.tointeger(math.floor((tonumber(value) or spec.min) / spec.step + 0.5) * spec.step)
@@ -104,9 +107,12 @@ function M.setting_writes(old_prefs, new_prefs)
   local writes, any = {}, false
   for name, spec in pairs(M.SETTINGS) do
     local old, new = old_prefs[name], new_prefs[name]
-    if old ~= nil and new ~= nil and old ~= new then
-      writes[spec.dp] = M.setting_value(spec, new)
-      any = true
+    if old ~= nil and new ~= nil then
+      local value = M.setting_value(spec, new)
+      if value ~= M.setting_value(spec, old) then
+        writes[spec.dp] = value
+        any = true
+      end
     end
   end
   return any and writes or nil

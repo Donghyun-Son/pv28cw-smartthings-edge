@@ -1,5 +1,5 @@
 # 항목과 순서는 공식 Matter 공기질 센서 프로필(aqs-temp-humidity-co2-pm1-pm25-pm10-meas)에 맞추고,
-# 이 기기에만 있는 TVOC, 포름알데히드, 배터리를 뒤에 붙인다.
+# 이 기기에만 있는 TVOC, 포름알데히드(HCHO), 배터리를 뒤에 붙인다.
 name: pv28cw-air-monitor
 components:
   - id: main
@@ -37,14 +37,6 @@ preferences:
     definition:
       stringType: text
       default: "0.0.0.0"
-  - name: deviceId
-    title: "Device ID"
-    description: "tuyawizard 결과(tuyadevices.json)의 id"
-    required: true
-    preferenceType: string
-    definition:
-      stringType: text
-      default: "-"
   - name: localKey
     title: "Local Key"
     description: "tuyadevices.json의 local_key (16자). 앱에서 센서를 다시 등록하면 바뀝니다"
@@ -62,23 +54,47 @@ preferences:
       maximum: 600
       default: 30
   - name: co2Alarm
-    title: "센서 이산화탄소 농도 경보 기준 (ppm)"
-    description: "800~2000, 100 단위. 바꿀 때만 센서에 씁니다"
+    title: "센서 이산화탄소 농도 경보 기준"
+    description: "바꿀 때만 센서에 씁니다"
     required: false
-    preferenceType: integer
+    preferenceType: enumeration
     definition:
-      minimum: 800
-      maximum: 2000
-      default: 1500
+      options:
+        "800": "800 ppm"
+        "900": "900 ppm"
+        "1000": "1000 ppm"
+        "1100": "1100 ppm"
+        "1200": "1200 ppm"
+        "1300": "1300 ppm"
+        "1400": "1400 ppm"
+        "1500": "1500 ppm"
+        "1600": "1600 ppm"
+        "1700": "1700 ppm"
+        "1800": "1800 ppm"
+        "1900": "1900 ppm"
+        "2000": "2000 ppm"
+      default: "1500"
   - name: pm25Alarm
-    title: "센서 PM 2.5 경보 기준 (μg/m³)"
-    description: "15~75, 5 단위. 바꿀 때만 센서에 씁니다"
+    title: "센서 PM 2.5 경보 기준"
+    description: "바꿀 때만 센서에 씁니다"
     required: false
-    preferenceType: integer
+    preferenceType: enumeration
     definition:
-      minimum: 15
-      maximum: 75
-      default: 75
+      options:
+        "15": "15 μg/m³"
+        "20": "20 μg/m³"
+        "25": "25 μg/m³"
+        "30": "30 μg/m³"
+        "35": "35 μg/m³"
+        "40": "40 μg/m³"
+        "45": "45 μg/m³"
+        "50": "50 μg/m³"
+        "55": "55 μg/m³"
+        "60": "60 μg/m³"
+        "65": "65 μg/m³"
+        "70": "70 μg/m³"
+        "75": "75 μg/m³"
+      default: "75"
   - name: alarmSwitch
     title: "센서 경보음"
     required: false

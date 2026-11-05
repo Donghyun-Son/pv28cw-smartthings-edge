@@ -1,9 +1,9 @@
 """driver/src/init.lua 를 SmartThings 라이브러리 모의 객체 위에서 Lua 5.3(lupa)으로 실행한다.
 
-    uv run tests/test_driver.py           # DP 매핑·설정 쓰기 계산·탐색·수명주기 (기기 없이)
+    uv run tests/test_driver.py           # DP 매핑·설정 쓰기·탐색·수명주기, 가짜 기기 상대 폴링 (기기 없이)
     uv run tests/test_driver.py --live    # + 실제 기기에서 init → 조회 → 이벤트 발행까지
 
-허브의 cosock/st.* 대신 tests/test_lua.py의 소켓·JSON 대역을 쓴다.
+허브의 cosock/st.* 대신 tests/test_lua.py의 소켓·JSON 대역과 가짜 Tuya 기기를 쓴다.
 """
 from __future__ import annotations
 
@@ -49,12 +49,20 @@ package.loaded["st.driver"] = function(name, template)
 end
 
 function captured.new_device(prefs)
-  local d = { id = "dev-1", label = "PV28-CW test", preferences = prefs, fields = {}, events = {}, timers = {} }
-  function d:emit_event(ev) table.insert(self.events, ev) end
+  local d = { id = "dev-1", label = "PV28-CW test", preferences = prefs, fields = {}, persisted = {},
+              events = {}, latest = {}, timers = {} }
+  function d:emit_event(ev)
+    table.insert(self.events, ev)
+    self.latest[ev.cap .. "." .. ev.attr] = ev.arg.value
+  end
+  function d:get_latest_state(_, cap, attr) return self.latest[cap .. "." .. attr] end
   function d:online() self.state = "online" end
   function d:offline() self.state = "offline" end
   function d:get_field(k) return self.fields[k] end
-  function d:set_field(k, v) self.fields[k] = v end
+  function d:set_field(k, v, opts)
+    self.fields[k] = v
+    if opts and opts.persist then self.persisted[k] = true end
+  end
   d.thread = {
     call_on_schedule = function(_, interval, fn, name)
       local t = { interval = interval, fn = fn, name = name }
@@ -80,23 +88,15 @@ end
 return captured
 """
 
+# 2026-11-06 01:38 실기 값 (앱: PM2.5 7 / PM1.0 5 / PM10 8)
+SAMPLE_DPS = {"1": "normal", "2": 803, "14": "normal", "15": 100, "18": 20, "19": 61, "20": 7, "21": 115,
+              "22": 9, "101": 8, "102": 5, "106": "normal"}
 
-def load_driver():
-    socket_lib = lua.eval("""function(factory)
-      return { tcp = function()
-        local py = factory()
-        return {
-          settimeout = function(_, t) py.settimeout(t) end,
-          connect = function(_, ip, port) return py.connect(ip, port) end,
-          send = function(_, d) return py.send(d) end,
-          receive = function(_, n) return py.receive(n) end,
-          close = function(_) py.close() end,
-        }
-      end }
-    end""")(T.PySock)
+
+def load_driver(factory=T.PySock):
     g = lua.globals()
-    g.JSON = lua.table_from({b"decode": lambda s: T.to_lua(json.loads(s))})
-    g.SOCKET = socket_lib
+    g.JSON = T.JSON_LIB
+    g.SOCKET = T.socket_lib(factory)
     for mod in (b"init", b"dpmap", b"discovery"):
         lua.eval(f'function() package.loaded["{mod.decode()}"] = nil end')()
     cap = lua.execute(MOCKS)
@@ -105,10 +105,18 @@ def load_driver():
 
 
 def prefs(**kw):
-    base = {"ipAddress": "0.0.0.0", "deviceId": "-", "localKey": "-", "pollInterval": 30,
-            "co2Alarm": 1500, "pm25Alarm": 75, "alarmSwitch": False, "screenSleep": True}
+    base = {"ipAddress": "0.0.0.0", "localKey": "-", "pollInterval": 30,
+            "co2Alarm": "1500", "pm25Alarm": "75", "alarmSwitch": False, "screenSleep": True}
     base.update(kw)
     return T.to_lua(base)
+
+
+def info_changed(drv, d, **changes):
+    old = d.preferences
+    d.preferences = prefs(**{**{k.decode(): (v.decode() if isinstance(v, bytes) else v) for k, v in old.items()},
+                             **changes})
+    args = lua.table_from({b"old_st_store": lua.table_from({b"preferences": old})})
+    drv.lifecycle_handlers.infoChanged(drv, d, b"infoChanged", args)
 
 
 def events_of(device) -> dict:
@@ -121,14 +129,15 @@ def events_of(device) -> dict:
     return out
 
 
+def logs(cap, level: str) -> list[str]:
+    return [x.decode() for x in cap.logs.values() if x.startswith(level.encode() + b":")]
+
+
 def test_dpmap() -> None:
     dpmap = lua.eval('require "dpmap"')
-    # 2026-11-06 01:38 실기 값 (앱: PM2.5 7 / PM1.0 5 / PM10 8)
-    dps = T.to_lua({"1": "normal", "2": 803, "14": "normal", "15": 100, "18": 20, "19": 61, "20": 7, "21": 115,
-                    "22": 9, "101": 8, "102": 5, "106": "normal"})
     evs = {f"{e.cap.decode()}.{e.attr.decode()}": (e.value.decode() if isinstance(e.value, bytes) else e.value,
                                                    e.unit.decode() if e.unit else None)
-           for e in dpmap.events(dps).values()}
+           for e in dpmap.events(T.to_lua(SAMPLE_DPS)).values()}
     T.check(evs["carbonDioxideMeasurement.carbonDioxide"] == (803, "ppm"), "co2")
     T.check(evs["fineDustSensor.fineDustLevel"] == (7, "μg/m^3"), "pm2.5")
     T.check(evs["dustSensor.fineDustLevel"] == (7, "μg/m^3"), "pm2.5 on dustSensor")
@@ -154,12 +163,16 @@ def test_dpmap() -> None:
     alarm = {e.attr.decode(): e.value.decode() for e in dpmap.events(T.to_lua({"2": 800, "1": "alarm"})).values()
              if isinstance(e.value, bytes)}
     T.check(alarm["airQualityHealthConcern"] == "unhealthy", "device co2 alarm raises overall concern")
-    # 설정 쓰기: 바뀐 것만, 범위·단위 맞춤, 최초 생성(old 없음)은 무시
-    w = dpmap.setting_writes(prefs(), prefs(co2Alarm=1234, screenSleep=False))
-    T.check(dict(w.items()) == {b"26": 1200, b"108": False}, f"setting writes {dict(w.items())}")
+    T.check(len(dpmap.events(T.to_lua({"1": "normal", "14": "normal"}))) == 0, "no events without measurement DPs")
+    # 설정 쓰기: 바뀐 것만, 목록 문자열과 예전 정수 값 모두 범위·단위 맞춤, 최초 생성(old 없음)은 무시
+    w = dpmap.setting_writes(prefs(), prefs(co2Alarm="900", screenSleep=False))
+    T.check(dict(w.items()) == {b"26": 900, b"108": False}, f"setting writes {dict(w.items())}")
+    T.check(dict(dpmap.setting_writes(prefs(), prefs(co2Alarm=1234)).items()) == {b"26": 1200}, "legacy int rounded")
     T.check(dpmap.setting_writes(prefs(), prefs()) is None, "no writes when unchanged")
-    T.check(dpmap.setting_writes(lua.table_from({}), prefs(co2Alarm=900)) is None, "no writes on first prefs")
-    T.check(dict(dpmap.setting_writes(prefs(), prefs(pm25Alarm=99)).items()) == {b"105": 75}, "pm25 clamp")
+    T.check(dpmap.setting_writes(prefs(), prefs(co2Alarm=1500)) is None, "legacy int equal to option is unchanged")
+    T.check(dpmap.setting_writes(lua.table_from({}), prefs(co2Alarm="900")) is None, "no writes on first prefs")
+    T.check(dict(dpmap.setting_writes(prefs(pm25Alarm="50"), prefs(pm25Alarm=99)).items()) == {b"105": 75}, "pm25 clamp")
+    T.check(dpmap.setting_writes(prefs(), prefs(pm25Alarm=99)) is None, "clamped value equal to current is unchanged")
 
 
 def test_lifecycle_unconfigured() -> None:
@@ -174,14 +187,73 @@ def test_lifecycle_unconfigured() -> None:
     drv.devices[1] = d
     drv.discovery(drv, None, lambda: True)
     T.check(len(cap.created) == 1, "discovery skips while placeholder unconfigured")
-    # 설정 전 기기: init → 타이머 2개, 조회 시 offline
+    # 설정 전 기기: init은 supported values만 보내고 조회 타이머를 걸지 않음
     drv.lifecycle_handlers.init(drv, d)
-    T.check(len(d.timers) == 2 and d.timers[1].interval == 30, "init schedules polling")
-    T.check(len(d.events) == 1 and d.events[1].attr == b"supportedAirQualityValues", "init emits supported values")
+    drv.lifecycle_handlers.added(drv, d)
+    T.check(len(d.events) == 1 and d.events[1].attr == b"supportedAirQualityValues", "init emits supported values once")
     T.check(list(d.events[1].arg.values()) == [b"unknown", b"good", b"slightlyUnhealthy", b"unhealthy", b"veryUnhealthy"],
             "supported values match Matter sensor")
-    cap.run_timers(d)
-    T.check(d.state == b"offline" and len(d.events) == 1, "unconfigured device stays offline")
+    T.check(len(d.timers) == 0 and d.state == b"offline", "unconfigured device is not polled")
+    T.check(any("IP 주소" in x for x in logs(cap, "info")), "log names the missing setting")
+    # 설정 전에 바꾼 센서 설정은 대기열(영구)에 남는다
+    info_changed(drv, d, co2Alarm="1200")
+    T.check(dict(d.fields[b"pending_writes"].items()) == {b"26": 1200} and d.persisted[b"pending_writes"],
+            "setting change kept as persistent pending write")
+    # 공백이 붙은 IP는 받고, 잘못된 IP/키는 어느 항목인지 알려 준다
+    discovery = lua.eval('require "discovery"')
+    conn = discovery.connection(cap.new_device(prefs(ipAddress=" 192.168.0.50 ", localKey=" 0123456789abcdef\n")))
+    T.check(conn.ip == b"192.168.0.50" and conn.local_key == b"0123456789abcdef", "connection trims whitespace")
+    for ip, key, problem in (("192.168.0.256", "0123456789abcdef", "IP"), ("192.168.0.50", "short", "Local Key")):
+        res = discovery.connection(cap.new_device(prefs(ipAddress=ip, localKey=key)))
+        T.check(res[0] is None and problem in res[1].decode(), f"invalid {problem}")
+
+
+def test_polling_fake_device() -> None:
+    dev = T.FakeTuya(SAMPLE_DPS)
+    cap = load_driver(dev.factory)
+    drv = cap.driver
+    d = cap.new_device(prefs())
+    drv.devices[1] = d
+    drv.lifecycle_handlers.init(drv, d)
+    # 설정 전에 바꾼 센서 설정 → 연결 설정 입력 → 첫 조회에서 쓰고 대기열을 비움
+    info_changed(drv, d, co2Alarm="1200")
+    T.check(not dev.sockets, "no connection while unconfigured")
+    info_changed(drv, d, ipAddress="192.168.0.50", localKey=T.LOCAL_KEY.decode())
+    T.check(len(d.timers) == 2 and d.timers[1].interval == 30, "connection settings start polling")
+    cap.run_timers(d)  # 주기 타이머 + 첫 조회 = 조회 2번
+    T.check(dev.writes == [{"26": 1200}] and d.fields[b"pending_writes"] is None, "pending write sent on first poll")
+    T.check(d.state == b"online" and len(d.events) == 12, f"11 events + supported values, got {len(d.events)}")
+    # 같은 값이면 보내지 않고, 바뀐 값만 보냄
+    refresh = drv.capability_handlers[b"refresh"][b"refresh"]
+    refresh(drv, d)
+    T.check(len(d.events) == 12, "unchanged values are not re-emitted")
+    dev.dps["2"] = 1500
+    refresh(drv, d)
+    T.check({e.attr for e in list(d.events.values())[12:]} == {b"carbonDioxide", b"airQualityHealthConcern"},
+            "only changed values emitted")
+    # 응답에 측정값이 없으면 실패로 세고, 3번째에 offline, 4번째부터 debug 로그
+    dev.query_payload = b"device busy"
+    for _ in range(4):
+        refresh(drv, d)
+    fails = [x for x in cap.logs.values() if "조회 실패".encode() in x]
+    T.check(d.state == b"offline" and d.fields[b"poll_failures"] == 4, "empty replies count as failures")
+    T.check([x.split(b":")[0] for x in fails] == [b"warn", b"warn", b"warn", b"debug"], "quiet after offline")
+    dev.query_payload = None
+    refresh(drv, d)
+    T.check(d.state == b"online" and any("다시 연결됨" in x for x in logs(cap, "info")), "recovers")
+    # 연결이 안 되면 대기열을 남겨 두고 다음 조회 때 씀
+    dev.reachable = False
+    info_changed(drv, d, pm25Alarm="50")
+    T.check(dict(d.fields[b"pending_writes"].items()) == {b"105": 50}, "pending kept while unreachable")
+    dev.reachable = True
+    refresh(drv, d)
+    T.check(dev.writes[-1] == {"105": 50} and d.fields[b"pending_writes"] is None, "pending retried")
+    # 기기가 쓰기에 답하지 않아도 조회가 되면 대기열을 비우고 경고 (매번 실패하지 않게)
+    dev.control_reply = False
+    info_changed(drv, d, alarmSwitch=True)
+    T.check(d.fields[b"pending_writes"] is None and d.state == b"online", "ignored write dropped, poll succeeds")
+    T.check(any("설정 쓰기 실패" in x for x in logs(cap, "warn")), "ignored write is logged")
+    T.check(all(s.closed for s in dev.sockets), "every poll closes its socket")
 
 
 def test_lifecycle_live(ip: str) -> None:
@@ -192,22 +264,20 @@ def test_lifecycle_live(ip: str) -> None:
     d = cap.new_device(prefs())
     drv.devices[1] = d
     drv.lifecycle_handlers.init(drv, d)
-    old = d.preferences
-    # 사용자가 설정에 IP/ID/Key 입력 → infoChanged → 폴링 재시작
-    d.preferences = prefs(ipAddress=ip, deviceId=dev["id"], localKey=dev["key"])
-    drv.lifecycle_handlers.infoChanged(drv, d, b"infoChanged", lua.table_from({b"old_st_store": lua.table_from({b"preferences": old})}))
-    T.check(d.timers[1].cancelled and len(d.timers) == 4, "infoChanged restarts polling")
+    # 사용자가 설정에 IP/Key 입력 → infoChanged → 폴링 시작
+    info_changed(drv, d, ipAddress=ip, localKey=dev["key"])
+    T.check(len(d.timers) == 2, "infoChanged starts polling")
     cap.run_timers(d)
     evs = {k: v for k, v in events_of(d).items() if not k.endswith("supportedAirQualityValues")}
     for k, v in sorted(evs.items()):
         print(f"    {k} = {v[0]!r}" + (f" {v[1]}" if v[1] else ""))
     T.check(d.state == b"online", "live device online")
     T.check(len(evs) == 11, f"live event count {len(evs)}")
-    # refresh 명령
+    # refresh 명령: 바뀐 값만 다시 보냄
     n = len(d.events)
     drv.capability_handlers[b"refresh"][b"refresh"](drv, d)
-    T.check(len(d.events) == n + 11, "refresh emits again")
-    warns = [x.decode() for x in cap.logs.values() if x.startswith(b"warn")]
+    T.check(d.state == b"online" and len(d.events) - n <= 11, "refresh")
+    warns = logs(cap, "warn")
     T.check(not warns, f"no warnings: {warns}")
 
 
@@ -217,7 +287,7 @@ def main() -> int:
     ap.add_argument("--live", action="store_true")
     ap.add_argument("--ip", default="192.168.0.7")
     args = ap.parse_args()
-    for t in (test_dpmap, test_lifecycle_unconfigured):
+    for t in (test_dpmap, test_lifecycle_unconfigured, test_polling_fake_device):
         t()
         print(f"{t.__name__}: ok")
     if args.live:

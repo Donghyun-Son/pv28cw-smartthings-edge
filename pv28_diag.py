@@ -70,7 +70,6 @@ DP_MAP = {
     "109": ("screen_sleep_time", "화면 꺼짐 시간", "s"),
 }
 MEASUREMENT_DPS = ("2", "18", "19", "20", "21", "22", "101", "102")
-UNITS = {"ppm": "ppm", "%": "%", "deg": "deg", "ug/m3": "ug/m3", "s": "s"}
 
 
 def now_iso() -> str:
@@ -81,8 +80,8 @@ def fmt_dp(dp: str, value) -> str:
     code, label, kind = DP_MAP.get(dp, ("?", "목록에 없는 DP", "raw"))
     if kind == "milli" and isinstance(value, (int, float)):
         shown = f"{value}  (= {value / 1000:.3f} mg/m3 = {value} ug/m3)"
-    elif kind in UNITS:
-        shown = f"{value} {UNITS[kind]}"
+    elif kind != "raw":
+        shown = f"{value} {kind}"
     else:
         shown = repr(value)
     return f"  DP {dp:>3}  {code:<20} {label:<22} {shown}"
@@ -323,10 +322,8 @@ def compare_mapping(entry: dict | None) -> list[str]:
 
 
 def print_key_help() -> None:
-    print("  Local Key가 필요합니다. 아래 순서로 얻은 뒤 --key 로 넘기거나 devices.json을 이 폴더에 두세요.")
-    print("    1) https://iot.tuya.com 에서 Cloud 프로젝트 생성 (Smart Life 앱 계정과 같은 데이터센터)")
-    print("    2) Devices > Link App Account 에서 Smart Life 앱으로 QR 스캔")
-    print("    3) uv run python -m tinytuya wizard   (API Key/Secret은 직접 입력)")
+    print("  Local Key가 필요합니다. README의 'Local Key 확인'(tuyawizard)으로 만든 tuyadevices.json에서")
+    print("  센서의 id와 local_key를 --id, --key로 넘기세요. tinytuya wizard가 만든 devices.json을 이 폴더에 둬도 됩니다.")
 
 
 def make_device(dev_id: str, ip: str, key: str, ver: float, persist: bool = False) -> tinytuya.Device:

@@ -74,15 +74,4 @@ function M.encrypt_block(w, block)
   return string.char(table.unpack(s))
 end
 
---- AES-128-ECB 암호화 (패딩 없음, 길이는 16의 배수).
-function M.ecb_encrypt(key, data)
-  assert(#data % 16 == 0, "ECB input must be a multiple of 16 bytes")
-  local w = M.expand_key(key)
-  local out = {}
-  for i = 1, #data, 16 do
-    out[#out + 1] = M.encrypt_block(w, data:sub(i, i + 15))
-  end
-  return table.concat(out)
-end
-
 return M

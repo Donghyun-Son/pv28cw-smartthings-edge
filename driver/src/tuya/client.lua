@@ -2,6 +2,7 @@
 -- SmartThings 밖에서도 돌도록 소켓 라이브러리와 JSON 디코더를 주입받는다.
 --   opts.socket : cosock.socket 또는 luasocket 호환 (tcp, settimeout, connect, send, receive, close)
 --   opts.json   : decode(str) 를 가진 모듈 (st.json)
+-- 3.4부터는 요청에 Device ID가 들어가지 않아서 받지 않는다 (tinytuya payload_dict "v3.4"/"v3.5").
 
 local protocol = require "tuya.protocol"
 
@@ -19,12 +20,11 @@ local function random_bytes(n)
 end
 
 function Client.new(opts)
-  assert(opts.ip and opts.device_id and opts.local_key, "ip, device_id, local_key required")
+  assert(opts.ip and opts.local_key, "ip, local_key required")
   assert(#opts.local_key == 16, "local key must be 16 characters")
   return setmetatable({
     ip = opts.ip,
     port = opts.port or 6668,
-    device_id = opts.device_id,
     local_key = opts.local_key,
     socket = assert(opts.socket, "socket library required"),
     json = assert(opts.json, "json library required"),
@@ -153,45 +153,36 @@ function Client:_read_reply(want_cmd)
   return nil, "no reply to cmd " .. want_cmd
 end
 
---- 현재 DPS 전체를 조회한다 (연결된 상태에서).
+--- 현재 DPS 전체를 조회한다 (session 안에서).
 function Client:query()
   local ok, err = self:_send(CMD.DP_QUERY_NEW, "{}", self.session_key)
   if not ok then return nil, err end
   return self:_read_reply(CMD.DP_QUERY_NEW)
 end
 
---- DPS를 쓴다 (연결된 상태에서). dps = { ["31"] = "c", ... }
-function Client:control(dps, now)
-  local payload = protocol.control_payload(dps, now or os.time())
+--- DPS를 쓴다 (session 안에서). dps = { ["26"] = 1200, ... }
+function Client:control(dps)
+  local payload = protocol.control_payload(dps, os.time())
   local ok, err = self:_send(CMD.CONTROL_NEW, payload, self.session_key)
   if not ok then return nil, err end
   return self:_read_reply(CMD.CONTROL_NEW)
 end
 
-local function with_session(self, fn)
-  local ok, err
-  for _ = 1, 2 do
-    ok, err = self:connect()
-    if ok or err ~= "zero session key" then break end
-  end
-  if not ok then return nil, err end
-  local result, ferr = fn()
-  self:close()
-  return result, ferr
-end
-
---- 연결 → 조회 → 종료. 성공하면 DPS 테이블.
-function Client:fetch()
-  return with_session(self, function() return self:query() end)
-end
-
---- 연결 → 쓰기 → 조회 → 종료. 성공하면 쓰기 후의 DPS 테이블.
-function Client:apply(dps)
-  return with_session(self, function()
-    local ok, err = self:control(dps)
-    if not ok then return nil, err end
-    return self:query()
+--- 연결 → fn() → 종료. fn 안에서 query/control을 부르고, fn이 돌려준 값과 오류를 그대로 돌려준다.
+-- 중간에 Lua 에러가 나도 소켓을 닫고 nil, 이유로 바꿔 돌려준다.
+function Client:session(fn)
+  local ok, result, err = pcall(function()
+    local connected, cerr
+    for _ = 1, 2 do
+      connected, cerr = self:connect()
+      if connected or cerr ~= "zero session key" then break end
+    end
+    if not connected then return nil, cerr end
+    return fn()
   end)
+  self:close()
+  if not ok then return nil, "lua error: " .. tostring(result) end
+  return result, err
 end
 
 return Client
