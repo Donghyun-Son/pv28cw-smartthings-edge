@@ -66,6 +66,12 @@ IP 주소는 공유기 관리 페이지에서 확인하고, 바뀌지 않게 고
 
 구조, 테스트, 직접 빌드하는 방법은 [docs/development.md](docs/development.md)에 있습니다.
 
+## 참고
+
+- [tinytuya](https://github.com/jasonacox/tinytuya): 프로토콜 동작 기준 (코드는 복사하지 않음)
+- [make-all/tuya-local](https://github.com/make-all/tuya-local): PV28-CW DP 정의
+- [SmartThingsEdgeDrivers](https://github.com/SmartThingsCommunity/SmartThingsEdgeDrivers): 공기질 프로필, LAN 드라이버 구조
+
 ## 라이선스
 
 [MIT](LICENSE)

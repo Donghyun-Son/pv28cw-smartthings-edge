@@ -82,7 +82,4 @@ smartthings edge:drivers:logcat
 
 ## 참고
 
-- [tinytuya](https://github.com/jasonacox/tinytuya): 프로토콜 동작 기준 (코드는 복사하지 않음)
-- [make-all/tuya-local](https://github.com/make-all/tuya-local): PV28-CW DP 정의
-- [SmartThingsEdgeDrivers](https://github.com/SmartThingsCommunity/SmartThingsEdgeDrivers): 공기질 프로필, LAN 드라이버 구조
 - [research-report.md](research-report.md): 처음 조사한 내용 (기존 드라이버, 대안, 프로토콜)
