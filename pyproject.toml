@@ -1,0 +1,13 @@
+[project]
+name = "pv28cw-smartthings-edge"
+version = "0.1.0"
+description = "SmartThings Edge LAN driver and diagnostics for the Tuya PV28-CW air quality monitor"
+requires-python = ">=3.12"
+dependencies = [
+    "tinytuya>=1.20.0",
+]
+
+[dependency-groups]
+dev = [
+    "lupa>=2.8",
+]

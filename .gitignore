@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+diag-results/
+research_notes/
+*.zip
+
+# tinytuya wizard 출력: Tuya API Key/Secret, Local Key가 들어 있음
+tinytuya.json
+devices.json
+snapshot.json
+tuya-raw.json

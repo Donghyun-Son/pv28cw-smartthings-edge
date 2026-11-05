@@ -1,0 +1,6 @@
+name: 'PV28-CW Tuya LAN'
+packageKey: 'pv28cw-tuya-lan'
+description: 'Tuya PV28-CW air quality monitor over local LAN (Tuya protocol 3.5)'
+permissions:
+  lan: {}
+  discovery: {}
