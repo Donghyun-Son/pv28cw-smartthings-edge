@@ -1,34 +1,26 @@
+# 항목과 순서는 공식 Matter 공기질 센서 프로필(aqs-temp-humidity-co2-pm1-pm25-pm10-meas)에 맞추고,
+# 이 기기에만 있는 TVOC, 포름알데히드, 배터리를 뒤에 붙인다.
 name: pv28cw-air-monitor
 components:
   - id: main
     capabilities:
       - id: airQualityHealthConcern
         version: 1
-      - id: carbonDioxideMeasurement
-        version: 1
-      - id: carbonDioxideHealthConcern
-        version: 1
-      - id: fineDustSensor
-        version: 1
-      - id: fineDustHealthConcern
-        version: 1
-      - id: veryFineDustSensor
-        version: 1
-      - id: veryFineDustHealthConcern
-        version: 1
-      - id: dustSensor
-        version: 1
-      - id: dustHealthConcern
-        version: 1
-      - id: tvocMeasurement
-        version: 1
-      - id: tvocHealthConcern
-        version: 1
-      - id: formaldehydeMeasurement
-        version: 1
       - id: temperatureMeasurement
         version: 1
       - id: relativeHumidityMeasurement
+        version: 1
+      - id: carbonDioxideMeasurement
+        version: 1
+      - id: veryFineDustSensor
+        version: 1
+      - id: fineDustSensor
+        version: 1
+      - id: dustSensor
+        version: 1
+      - id: tvocMeasurement
+        version: 1
+      - id: formaldehydeMeasurement
         version: 1
       - id: battery
         version: 1
@@ -47,7 +39,7 @@ preferences:
       default: "0.0.0.0"
   - name: deviceId
     title: "Device ID"
-    description: "tinytuya wizard의 devices.json 'id'"
+    description: "tuyawizard 결과(tuyadevices.json)의 id"
     required: true
     preferenceType: string
     definition:
@@ -55,7 +47,7 @@ preferences:
       default: "-"
   - name: localKey
     title: "Local Key"
-    description: "16자. 기기를 앱에서 다시 등록하면 바뀝니다"
+    description: "tuyadevices.json의 local_key (16자). 앱에서 센서를 다시 등록하면 바뀝니다"
     required: true
     preferenceType: string
     definition:
@@ -70,8 +62,8 @@ preferences:
       maximum: 600
       default: 30
   - name: co2Alarm
-    title: "기기 CO2 경보 임계값 (ppm)"
-    description: "800~2000, 100 단위. 바꿀 때만 기기에 씁니다"
+    title: "센서 이산화탄소 농도 경보 기준 (ppm)"
+    description: "800~2000, 100 단위. 바꿀 때만 센서에 씁니다"
     required: false
     preferenceType: integer
     definition:
@@ -79,8 +71,8 @@ preferences:
       maximum: 2000
       default: 1500
   - name: pm25Alarm
-    title: "기기 PM2.5 경보 임계값"
-    description: "15~75, 5 단위. 바꿀 때만 기기에 씁니다"
+    title: "센서 PM 2.5 경보 기준 (μg/m³)"
+    description: "15~75, 5 단위. 바꿀 때만 센서에 씁니다"
     required: false
     preferenceType: integer
     definition:
@@ -88,13 +80,13 @@ preferences:
       maximum: 75
       default: 75
   - name: alarmSwitch
-    title: "기기 경보음"
+    title: "센서 경보음"
     required: false
     preferenceType: boolean
     definition:
       default: false
   - name: screenSleep
-    title: "기기 화면 자동 꺼짐"
+    title: "센서 화면 자동 꺼짐"
     required: false
     preferenceType: boolean
     definition:

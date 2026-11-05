@@ -139,16 +139,21 @@ def test_dpmap() -> None:
     T.check(evs["temperatureMeasurement.temperature"] == (20, "C"), "temp")
     T.check(evs["battery.battery"] == (100, None), "battery")
     T.check(evs["airQualityHealthConcern.airQualityHealthConcern"] == ("good", None), "overall good")
-    T.check(len(evs) == 16, f"event count {len(evs)}")
-    # 등급 경계와 기기 경보 반영
+    T.check(len(evs) == 11, f"event count {len(evs)}")
+    T.check(not any(k.endswith("HealthConcern") and not k.startswith("airQuality") for k in evs),
+            "no per-pollutant health concern (aligned with Matter sensor)")
+    # 등급 경계와 기기 경보 반영. 등급 값은 Matter 센서의 supportedAirQualityValues 안에서만
+    supported = {v.decode() for v in dpmap.SUPPORTED_AIR_QUALITY.values()}
     lvl = lambda kind, v: dpmap.level(kind.encode(), v).decode()  # noqa: E731
-    T.check([lvl("pm25", v) for v in (15, 16, 35, 36, 75, 76)] ==
-            ["good", "moderate", "moderate", "unhealthy", "unhealthy", "veryUnhealthy"], "pm25 levels")
-    T.check([lvl("co2", v) for v in (1000, 1001, 2001)] == ["good", "moderate", "unhealthy"], "co2 levels")
+    pm25 = [lvl("pm25", v) for v in (15, 16, 35, 36, 75, 76)]
+    T.check(pm25 == ["good", "slightlyUnhealthy", "slightlyUnhealthy", "unhealthy", "unhealthy", "veryUnhealthy"],
+            "pm25 levels")
+    T.check([lvl("co2", v) for v in (1000, 1001, 2001)] == ["good", "slightlyUnhealthy", "unhealthy"], "co2 levels")
+    T.check(set(pm25) <= supported and supported == {"unknown", "good", "slightlyUnhealthy", "unhealthy", "veryUnhealthy"},
+            "levels within supported values")
     alarm = {e.attr.decode(): e.value.decode() for e in dpmap.events(T.to_lua({"2": 800, "1": "alarm"})).values()
              if isinstance(e.value, bytes)}
-    T.check(alarm["carbonDioxideHealthConcern"] == "unhealthy" and alarm["airQualityHealthConcern"] == "unhealthy",
-            "device co2 alarm raises concern")
+    T.check(alarm["airQualityHealthConcern"] == "unhealthy", "device co2 alarm raises overall concern")
     # 설정 쓰기: 바뀐 것만, 범위·단위 맞춤, 최초 생성(old 없음)은 무시
     w = dpmap.setting_writes(prefs(), prefs(co2Alarm=1234, screenSleep=False))
     T.check(dict(w.items()) == {b"26": 1200, b"108": False}, f"setting writes {dict(w.items())}")
@@ -172,8 +177,11 @@ def test_lifecycle_unconfigured() -> None:
     # 설정 전 기기: init → 타이머 2개, 조회 시 offline
     drv.lifecycle_handlers.init(drv, d)
     T.check(len(d.timers) == 2 and d.timers[1].interval == 30, "init schedules polling")
+    T.check(len(d.events) == 1 and d.events[1].attr == b"supportedAirQualityValues", "init emits supported values")
+    T.check(list(d.events[1].arg.values()) == [b"unknown", b"good", b"slightlyUnhealthy", b"unhealthy", b"veryUnhealthy"],
+            "supported values match Matter sensor")
     cap.run_timers(d)
-    T.check(d.state == b"offline" and len(d.events) == 0, "unconfigured device stays offline")
+    T.check(d.state == b"offline" and len(d.events) == 1, "unconfigured device stays offline")
 
 
 def test_lifecycle_live(ip: str) -> None:
@@ -190,15 +198,15 @@ def test_lifecycle_live(ip: str) -> None:
     drv.lifecycle_handlers.infoChanged(drv, d, b"infoChanged", lua.table_from({b"old_st_store": lua.table_from({b"preferences": old})}))
     T.check(d.timers[1].cancelled and len(d.timers) == 4, "infoChanged restarts polling")
     cap.run_timers(d)
-    evs = events_of(d)
+    evs = {k: v for k, v in events_of(d).items() if not k.endswith("supportedAirQualityValues")}
     for k, v in sorted(evs.items()):
         print(f"    {k} = {v[0]!r}" + (f" {v[1]}" if v[1] else ""))
     T.check(d.state == b"online", "live device online")
-    T.check(len(evs) == 16, f"live event count {len(evs)}")
+    T.check(len(evs) == 11, f"live event count {len(evs)}")
     # refresh 명령
     n = len(d.events)
     drv.capability_handlers[b"refresh"][b"refresh"](drv, d)
-    T.check(len(d.events) == n + 16, "refresh emits again")
+    T.check(len(d.events) == n + 11, "refresh emits again")
     warns = [x.decode() for x in cap.logs.values() if x.startswith(b"warn")]
     T.check(not warns, f"no warnings: {warns}")
 

@@ -1,4 +1,4 @@
--- PV28-CW 공기질 측정기 SmartThings Edge LAN 드라이버 (Tuya 프로토콜 3.5).
+-- PV28-CW 공기질 센서 SmartThings Edge LAN 드라이버 (Tuya 프로토콜 3.5).
 -- 주기마다 연결 → 세션 키 협상 → DP 조회 → 종료. 연결을 붙잡아 두지 않는다.
 
 local Driver = require "st.driver"
@@ -44,6 +44,15 @@ local function emit_dps(device, dps)
   end
 end
 
+-- 앱이 보여 줄 종합 등급 범위를 Matter 공기질 센서와 같게 제한한다
+local function emit_supported_values(device)
+  local ok, err = pcall(function()
+    device:emit_event(capabilities.airQualityHealthConcern.supportedAirQualityValues(
+      dpmap.SUPPORTED_AIR_QUALITY, { visibility = { displayed = false } }))
+  end)
+  if not ok then log.warn(name_of(device) .. ": supportedAirQualityValues 실패: " .. tostring(err)) end
+end
+
 local function poll(device)
   if not discovery.is_configured(device) then
     log.info(name_of(device) .. ": 설정에서 IP 주소, Device ID, Local Key를 입력하세요")
@@ -74,10 +83,12 @@ local function start_polling(device)
 end
 
 local function device_init(_, device)
+  emit_supported_values(device)
   start_polling(device)
 end
 
 local function device_added(_, device)
+  emit_supported_values(device)
   -- LAN 드라이버에서 init이 호출되지 않는 경우가 있어 added에서도 보장한다 (공식 WeMo 드라이버 주석)
   if not device:get_field(POLL_TIMER) then start_polling(device) end
 end

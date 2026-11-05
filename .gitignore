@@ -4,7 +4,9 @@ diag-results/
 research_notes/
 *.zip
 
-# tinytuya wizard 출력: Tuya API Key/Secret, Local Key가 들어 있음
+# tinytuya / tuyawizard 출력: Tuya API Key/Secret, Local Key가 들어 있음
+tuyadevices.json
+tuyacreds.json
 tinytuya.json
 devices.json
 snapshot.json

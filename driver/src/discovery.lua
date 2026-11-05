@@ -26,7 +26,7 @@ function M.handle(driver, _opts, _should_continue)
   driver:try_create_device({
     type = "LAN",
     device_network_id = dni,
-    label = "PV28-CW 공기질 측정기",
+    label = "공기질 센서",
     profile = "pv28cw-air-monitor",
     manufacturer = "Tuya",
     model = "PV28-CW",

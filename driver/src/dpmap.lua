@@ -20,24 +20,29 @@ M.MEASUREMENTS = {
   { dp = "15", cap = "battery", attr = "battery" },
 }
 
--- 등급 순서 (뒤로 갈수록 나쁨)
-local RANK = { good = 1, moderate = 2, slightlyUnhealthy = 3, unhealthy = 4, veryUnhealthy = 5, hazardous = 6 }
+-- 종합 공기질 등급은 같은 집의 Matter 공기질 센서(공식 matter-sensor 드라이버)와 같은 값만 쓴다.
+M.SUPPORTED_AIR_QUALITY = { "unknown", "good", "slightlyUnhealthy", "unhealthy", "veryUnhealthy" }
 
--- 등급 기준: { 상한, 등급 } 오름차순, 마지막 상한을 넘으면 마지막 등급.
--- 미세먼지는 환경부 예보 등급(좋음/보통/나쁨/매우나쁨), CO2·TVOC는 실내공기질 관리 기준을 참고했다.
+-- 등급 순서 (뒤로 갈수록 나쁨)
+local RANK = { good = 1, slightlyUnhealthy = 2, unhealthy = 3, veryUnhealthy = 4 }
+
+-- 항목별 기준: { 상한, 등급 } 오름차순, 마지막 상한을 넘으면 마지막 등급.
+-- 미세먼지는 환경부 예보 등급(좋음/보통/나쁨/매우나쁨) 경계, CO2·TVOC는 실내공기질 관리 기준을 참고했다.
+-- 2단계(보통)는 Matter 센서와 맞춰 slightlyUnhealthy로 표시한다.
 M.LEVELS = {
-  pm25 = { { 15, "good" }, { 35, "moderate" }, { 75, "unhealthy" }, { math.huge, "veryUnhealthy" } },
-  pm10 = { { 30, "good" }, { 80, "moderate" }, { 150, "unhealthy" }, { math.huge, "veryUnhealthy" } },
-  co2 = { { 1000, "good" }, { 2000, "moderate" }, { math.huge, "unhealthy" } },
-  tvoc = { { 400, "good" }, { 1000, "moderate" }, { math.huge, "unhealthy" } },
+  pm25 = { { 15, "good" }, { 35, "slightlyUnhealthy" }, { 75, "unhealthy" }, { math.huge, "veryUnhealthy" } },
+  pm10 = { { 30, "good" }, { 80, "slightlyUnhealthy" }, { 150, "unhealthy" }, { math.huge, "veryUnhealthy" } },
+  co2 = { { 1000, "good" }, { 2000, "slightlyUnhealthy" }, { math.huge, "unhealthy" } },
+  tvoc = { { 400, "good" }, { 1000, "slightlyUnhealthy" }, { math.huge, "unhealthy" } },
 }
 
-local HEALTH = {
-  { dp = "2", levels = "co2", cap = "carbonDioxideHealthConcern", attr = "carbonDioxideHealthConcern", alarm_dp = "1" },
-  { dp = "20", levels = "pm25", cap = "fineDustHealthConcern", attr = "fineDustHealthConcern", alarm_dp = "106" },
-  { dp = "102", levels = "pm25", cap = "veryFineDustHealthConcern", attr = "veryFineDustHealthConcern" },
-  { dp = "101", levels = "pm10", cap = "dustHealthConcern", attr = "dustHealthConcern" },
-  { dp = "21", levels = "tvoc", cap = "tvocHealthConcern", attr = "tvocHealthConcern" },
+-- 종합 등급에 반영하는 항목. alarm_dp가 "alarm"이면 기기 자체 경보로 보고 최소 unhealthy.
+local HEALTH_SOURCES = {
+  { dp = "2", levels = "co2", alarm_dp = "1" },
+  { dp = "20", levels = "pm25", alarm_dp = "106" },
+  { dp = "102", levels = "pm25" },
+  { dp = "101", levels = "pm10" },
+  { dp = "21", levels = "tvoc" },
 }
 
 function M.level(kind, value)
@@ -64,13 +69,12 @@ function M.events(dps)
     end
   end
   local overall
-  for _, h in ipairs(HEALTH) do
+  for _, h in ipairs(HEALTH_SOURCES) do
     local v = dps[h.dp]
     if type(v) == "number" then
       local lvl = M.level(h.levels, v)
       -- 기기 자체 경보(사용자가 기기에 설정한 임계값 초과)가 울리면 최소 unhealthy로 본다
       if h.alarm_dp and dps[h.alarm_dp] == "alarm" then lvl = worse(lvl, "unhealthy") end
-      out[#out + 1] = { cap = h.cap, attr = h.attr, value = lvl }
       overall = worse(overall, lvl)
     end
   end
