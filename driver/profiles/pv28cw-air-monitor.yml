@@ -53,6 +53,16 @@ preferences:
       minimum: 10
       maximum: 600
       default: 30
+  # 센서에는 보정 DP가 없어서 드라이버가 더한다. 표준 humidityOffset preference와 섞이지 않게 이름을 따로 쓴다
+  - name: humidityCorrection
+    title: "습도 보정 (%p)"
+    description: "센서 습도에 더할 값. 기준 습도계보다 5 높게 나오면 -5"
+    required: false
+    preferenceType: integer
+    definition:
+      minimum: -20
+      maximum: 20
+      default: 0
   - name: co2Alarm
     title: "센서 이산화탄소 농도 경보 기준"
     description: "바꿀 때만 센서에 씁니다"

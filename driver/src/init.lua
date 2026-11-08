@@ -99,7 +99,7 @@ local function poll(device)
   local client = client_for(conn)
   local dps, err = client:session(function() return sync(device, client) end)
   -- 응답은 왔지만 측정값이 하나도 없으면(센서 MCU 멈춤 등) 실패로 센다
-  local events = dps and dpmap.events(dps)
+  local events = dps and dpmap.events(dps, device.preferences)
   if not events or #events == 0 then
     record_failure(device, err or "응답에 측정값이 없음")
     return
@@ -160,7 +160,8 @@ local function info_changed(_, device, _, args)
       return
     end
   end
-  if writes then poll(device) end
+  -- 설정 쓰기나 보정 값 변경은 다음 주기를 기다리지 않고 바로 반영한다
+  if writes or dpmap.corrections_changed(old, new) then poll(device) end
 end
 
 local function refresh(_, device)

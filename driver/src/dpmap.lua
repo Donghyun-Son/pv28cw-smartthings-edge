@@ -7,10 +7,12 @@ local M = {}
 local UG = "μg/m^3"
 
 -- 측정값 DP. scale이 있으면 value / scale 로 보낸다.
+-- correction이 있으면 그 이름의 preference 값을 더하고 min~max로 자른다 (센서에 보정 DP가 없음).
 M.MEASUREMENTS = {
   { dp = "2", cap = "carbonDioxideMeasurement", attr = "carbonDioxide", unit = "ppm" },
   { dp = "18", cap = "temperatureMeasurement", attr = "temperature", unit = "C" },
-  { dp = "19", cap = "relativeHumidityMeasurement", attr = "humidity", unit = "%" },
+  { dp = "19", cap = "relativeHumidityMeasurement", attr = "humidity", unit = "%",
+    correction = "humidityCorrection", min = 0, max = 100 },
   { dp = "20", cap = "fineDustSensor", attr = "fineDustLevel", unit = UG },
   { dp = "20", cap = "dustSensor", attr = "fineDustLevel", unit = UG },
   { dp = "101", cap = "dustSensor", attr = "dustLevel", unit = UG },
@@ -60,13 +62,30 @@ local function worse(a, b)
   return RANK[b] > RANK[a] and b or a
 end
 
---- dps({["2"]=788, ...}) → { {cap=, attr=, value=, unit=}, ... }
-function M.events(dps)
+local function correction_of(m, prefs)
+  return m.correction and prefs and tonumber(prefs[m.correction]) or 0
+end
+
+--- 보정 preference가 바뀌었는지. 바뀌면 바로 다시 조회해 보정한 값을 보낸다.
+function M.corrections_changed(old_prefs, new_prefs)
+  for _, m in ipairs(M.MEASUREMENTS) do
+    if m.correction and correction_of(m, old_prefs) ~= correction_of(m, new_prefs) then return true end
+  end
+  return false
+end
+
+--- dps({["2"]=788, ...}), preferences → { {cap=, attr=, value=, unit=}, ... }
+function M.events(dps, prefs)
   local out = {}
   for _, m in ipairs(M.MEASUREMENTS) do
     local v = dps[m.dp]
     if type(v) == "number" then
       if m.scale then v = v / m.scale end
+      local c = correction_of(m, prefs)
+      if c ~= 0 then
+        v = math.max(m.min, math.min(m.max, v + c))
+        v = math.tointeger(v) or v
+      end
       out[#out + 1] = { cap = m.cap, attr = m.attr, value = v, unit = m.unit }
     end
   end
