@@ -141,9 +141,15 @@ local function device_removed(_, device)
   if timer then device.thread:cancel_timer(timer) end
 end
 
-local function info_changed(_, device, _, args)
+local function info_changed(driver, device, _, args)
   local old = (args and args.old_st_store and args.old_st_store.preferences) or {}
   local new = device.preferences
+
+  -- "새 기기 추가" 스위치: 켜짐/꺼짐과 상관없이 바뀔 때마다 기기를 하나 만든다.
+  -- 기기를 처음 만들거나 드라이버 업데이트로 설정이 새로 생길 때(old가 nil)는 무시한다
+  if old.addDevice ~= nil and new.addDevice ~= nil and old.addDevice ~= new.addDevice then
+    discovery.add_placeholder(driver)
+  end
 
   -- 센서 설정은 대기 목록에 넣고 다음 조회 때 함께 쓴다
   local writes = dpmap.setting_writes(old, new)

@@ -8,7 +8,7 @@ driver/
   profiles/pv28cw-air-monitor.yml  # capability 11개, 기기 설정
   src/init.lua                     # 수명주기, 폴링, refresh, 설정 쓰기 대기열
   src/dpmap.lua                    # DP → capability, 공기질 등급, 설정 → DP
-  src/discovery.lua                # 주변 기기 검색 시 빈 기기 생성, 연결 설정 확인
+  src/discovery.lua                # 주변 기기 검색·새 기기 추가 시 빈 기기 생성, 연결 설정 확인
   src/tuya/client.lua              # 연결 → 세션 키 협상 → 조회/제어 → 종료
   src/tuya/protocol.lua            # Tuya 3.5 프레임(6699), 세션 키
   src/tuya/aes.lua gcm.lua sha256.lua
@@ -21,6 +21,8 @@ tests/                             # Lua 5.3(lupa)로 드라이버 코드를 PC�
 - 30초(설정 가능)마다 TCP 6668로 접속해 세션 키를 협상하고 `DP_QUERY_NEW` 한 번 보낸 뒤 연결을 끊습니다.
 - Edge 런타임에는 쓸 만한 암호 API가 없어서 AES-128, GCM, SHA-256/HMAC을 순수 Lua로 구현했습니다.
 - 허브는 Tuya 탐색 포트(UDP 6666/6667/7000)를 bind할 수 없습니다. 그래서 주변 기기 검색 때 빈 기기를 만들고 IP와 Local Key는 사용자가 넣습니다. 3.5 요청에는 Device ID가 들어가지 않아서 받지 않습니다.
+- 여러 대를 쓸 수 있게 기기 설정에 `addDevice` 스위치를 둡니다. 설정 화면에는 버튼이 없어서, 값이 바뀌면(켜짐/꺼짐 무관) `infoChanged`에서 `driver:try_create_device`로 빈 기기를 만듭니다. 이전 값이 없을 때(기기 생성, 드라이버 업데이트로 설정 추가)는 무시합니다.
+- 빈 기기는 설정 전 기기가 이미 있으면 만들지 않습니다. `try_create_device`는 비동기라 만든 기기가 `get_devices`에 나오거나 60초가 지날 때까지는 다시 요청해도 만들지 않습니다(스위치를 켰다 바로 끄는 경우). 이름은 "공기질 센서", "공기질 센서 2", ... 중 안 쓰는 것을 붙입니다.
 - IP와 Local Key가 없거나 형식이 틀리면 조회하지 않고, 어느 항목이 문제인지 로그에 남깁니다.
 - 연속 3번 조회에 실패하면 오프라인으로 표시합니다. 응답에 측정 DP가 하나도 없어도 실패로 셉니다. 4번째부터는 실패 로그를 debug로 남깁니다.
 - 값이 바뀐 이벤트만 보냅니다 (`device:get_latest_state`와 비교).
