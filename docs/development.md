@@ -27,14 +27,14 @@ tests/                             # Lua 5.3(lupa)로 드라이버 코드를 PC�
 - 연속 3번 조회에 실패하면 오프라인으로 표시합니다. 응답에 측정 DP가 하나도 없어도 실패로 셉니다. 4번째부터는 실패 로그를 debug로 남깁니다.
 - 값이 바뀐 이벤트만 보냅니다 (`device:get_latest_state`와 비교).
 - 기기 설정을 바꾸면 쓸 DP를 대기열(영구 필드)에 넣고 바로 조회합니다. 같은 세션에서 CONTROL_NEW → DP_QUERY_NEW 순서로 보내고, 쓰기가 성공했거나 쓰기는 실패해도 조회가 되면(기기가 받지 않음) 대기열을 비웁니다. 연결이 안 되면 남겨 두고 다음 조회 때 다시 보냅니다.
-- 센서에는 습도 보정 DP가 없어서 드라이버가 `humidityCorrection` 설정 값을 더합니다. 바꾸면 바로 다시 조회합니다. 표준 `humidityOffset` preference와 섞이지 않게 이름을 따로 씁니다.
+- 센서에는 보정 DP가 없어서 드라이버가 `temperatureCorrection`(°C, 소수 가능), `humidityCorrection` 설정 값을 더하고 소수 첫째 자리로 반올림합니다. 바꾸면 바로 다시 조회합니다. 표준 `tempOffset`·`humidityOffset` preference와 섞이지 않게 이름을 따로 씁니다.
 
 ## DP
 
 | DP | 코드 | 처리 |
 |---|---|---|
 | 2 | `co2_value` | `carbonDioxideMeasurement` (ppm) |
-| 18 | `temp_current` | `temperatureMeasurement` (°C 고정, 표시 단위 설정과 무관) |
+| 18 | `temp_current` | `temperatureMeasurement` (°C 고정, 표시 단위 설정과 무관. 온도 보정을 더함) |
 | 19 | `humidity_value` | `relativeHumidityMeasurement` (습도 보정을 더하고 0~100으로 자름) |
 | 102 | `pm25` | `veryFineDustSensor` (이름과 달리 실제 PM1.0) |
 | 20 | `pm25_value` | `fineDustSensor`, `dustSensor.fineDustLevel` |

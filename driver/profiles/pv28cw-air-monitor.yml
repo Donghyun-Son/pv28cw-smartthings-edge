@@ -53,7 +53,16 @@ preferences:
       minimum: 10
       maximum: 600
       default: 30
-  # 센서에는 보정 DP가 없어서 드라이버가 더한다. 표준 humidityOffset preference와 섞이지 않게 이름을 따로 쓴다
+  # 센서에는 보정 DP가 없어서 드라이버가 더한다. 표준 tempOffset/humidityOffset preference와 섞이지 않게 이름을 따로 쓴다
+  - name: temperatureCorrection
+    title: "온도 보정 (°C)"
+    description: "센서 온도에 더할 값. 기준 온도계보다 1.5도 높게 나오면 -1.5"
+    required: false
+    preferenceType: number
+    definition:
+      minimum: -10
+      maximum: 10
+      default: 0
   - name: humidityCorrection
     title: "습도 보정 (%p)"
     description: "센서 습도에 더할 값. 기준 습도계보다 5 높게 나오면 -5"

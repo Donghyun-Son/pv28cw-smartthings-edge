@@ -7,10 +7,11 @@ local M = {}
 local UG = "μg/m^3"
 
 -- 측정값 DP. scale이 있으면 value / scale 로 보낸다.
--- correction이 있으면 그 이름의 preference 값을 더하고 min~max로 자른다 (센서에 보정 DP가 없음).
+-- correction이 있으면 그 이름의 preference 값을 더하고, min/max가 있으면 그 안으로 자른다 (센서에 보정 DP가 없음).
 M.MEASUREMENTS = {
   { dp = "2", cap = "carbonDioxideMeasurement", attr = "carbonDioxide", unit = "ppm" },
-  { dp = "18", cap = "temperatureMeasurement", attr = "temperature", unit = "C" },
+  { dp = "18", cap = "temperatureMeasurement", attr = "temperature", unit = "C",
+    correction = "temperatureCorrection" },
   { dp = "19", cap = "relativeHumidityMeasurement", attr = "humidity", unit = "%",
     correction = "humidityCorrection", min = 0, max = 100 },
   { dp = "20", cap = "fineDustSensor", attr = "fineDustLevel", unit = UG },
@@ -83,7 +84,10 @@ function M.events(dps, prefs)
       if m.scale then v = v / m.scale end
       local c = correction_of(m, prefs)
       if c ~= 0 then
-        v = math.max(m.min, math.min(m.max, v + c))
+        v = v + c
+        if m.min then v = math.max(m.min, math.min(m.max, v)) end
+        -- 소수 보정(-1.5 등)에서 생기는 부동소수 오차를 없애려고 소수 첫째 자리로 반올림한다
+        v = math.floor(v * 10 + 0.5) / 10
         v = math.tointeger(v) or v
       end
       out[#out + 1] = { cap = m.cap, attr = m.attr, value = v, unit = m.unit }

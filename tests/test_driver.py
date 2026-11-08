@@ -105,7 +105,8 @@ def load_driver(factory=T.PySock):
 
 
 def prefs(**kw):
-    base = {"ipAddress": "0.0.0.0", "localKey": "-", "pollInterval": 30, "humidityCorrection": 0,
+    base = {"ipAddress": "0.0.0.0", "localKey": "-", "pollInterval": 30, "temperatureCorrection": 0,
+            "humidityCorrection": 0,
             "co2Alarm": "1500", "pm25Alarm": "75", "alarmSwitch": False, "screenSleep": True, "addDevice": False}
     base.update(kw)
     return T.to_lua(base)
@@ -165,17 +166,28 @@ def test_dpmap() -> None:
     T.check(alarm["airQualityHealthConcern"] == "unhealthy", "device co2 alarm raises overall concern")
     T.check(len(dpmap.events(T.to_lua({"1": "normal", "14": "normal"}))) == 0, "no events without measurement DPs")
     # 습도 보정: 습도에만 더하고 0~100으로 자름, 정수 유지. 보정 0이나 preference 없음은 원래 값
-    def humidity(dps, **kw):
+    def measured(dps, **kw):
         evs = dpmap.events(T.to_lua(dps), prefs(**kw))
         return {e.attr.decode(): e.value for e in evs.values()}
-    corrected = humidity(SAMPLE_DPS, humidityCorrection=-11)
+    corrected = measured(SAMPLE_DPS, humidityCorrection=-11)
     T.check(corrected["humidity"] == 50 and isinstance(corrected["humidity"], int), "humidity correction")
     T.check(corrected["temperature"] == 20 and corrected["carbonDioxide"] == 803, "correction only touches humidity")
-    T.check(humidity({"19": 95}, humidityCorrection=10)["humidity"] == 100, "corrected humidity clamped to 100")
-    T.check(humidity({"19": 3}, humidityCorrection=-5)["humidity"] == 0, "corrected humidity clamped to 0")
-    T.check(humidity({"19": 61}, humidityCorrection="-3")["humidity"] == 58, "string preference value")
-    T.check(humidity({"19": 61})["humidity"] == 61, "no correction by default")
+    T.check(measured({"19": 95}, humidityCorrection=10)["humidity"] == 100, "corrected humidity clamped to 100")
+    T.check(measured({"19": 3}, humidityCorrection=-5)["humidity"] == 0, "corrected humidity clamped to 0")
+    T.check(measured({"19": 61}, humidityCorrection="-3")["humidity"] == 58, "string preference value")
+    T.check(measured({"19": 61})["humidity"] == 61, "no correction by default")
+    # 온도 보정: 소수 가능(소수 첫째 자리로 반올림), 자르지 않음, 습도와 따로
+    corrected = measured(SAMPLE_DPS, temperatureCorrection=-1.5)
+    T.check(corrected["temperature"] == 18.5 and corrected["humidity"] == 61, "temperature correction")
+    T.check(measured({"18": 20}, temperatureCorrection=-0.3)["temperature"] == 19.7, "no float noise (19.7)")
+    T.check(measured({"18": 20}, temperatureCorrection=0.05)["temperature"] == 20.1, "rounded to 0.1")
+    t = measured({"18": 20}, temperatureCorrection=2.0)["temperature"]
+    T.check(t == 22 and isinstance(t, int), "whole-degree correction stays integer")
+    T.check(measured({"18": 3}, temperatureCorrection=-10)["temperature"] == -7, "temperature below zero not clamped")
+    both = measured(SAMPLE_DPS, temperatureCorrection=1, humidityCorrection=-1)
+    T.check((both["temperature"], both["humidity"]) == (21, 60), "temperature and humidity corrected together")
     T.check(dpmap.corrections_changed(prefs(), prefs(humidityCorrection=-5)), "correction change detected")
+    T.check(dpmap.corrections_changed(prefs(), prefs(temperatureCorrection=-0.5)), "temperature correction change")
     T.check(not dpmap.corrections_changed(prefs(), prefs(co2Alarm="900")), "other settings are not corrections")
     T.check(not dpmap.corrections_changed(lua.table_from({}), prefs()), "missing old correction equals 0")
     # 설정 쓰기: 바뀐 것만, 목록 문자열과 예전 정수 값 모두 범위·단위 맞춤, 최초 생성(old 없음)은 무시
@@ -298,6 +310,10 @@ def test_polling_fake_device() -> None:
     info_changed(drv, d, humidityCorrection=-11)
     T.check([(e.attr, e.arg.value) for e in list(d.events.values())[n:]] == [(b"humidity", 50)],
             "humidity correction applied right away")
+    n = len(d.events)
+    info_changed(drv, d, temperatureCorrection=-1.5)
+    T.check([(e.attr, e.arg.value) for e in list(d.events.values())[n:]] == [(b"temperature", 18.5)],
+            "temperature correction applied right away")
     # 응답에 측정값이 없으면 실패로 세고, 3번째에 offline, 4번째부터 debug 로그
     dev.query_payload = b"device busy"
     for _ in range(4):
