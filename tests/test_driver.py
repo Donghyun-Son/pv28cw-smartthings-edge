@@ -288,6 +288,65 @@ def test_add_device() -> None:
     T.check(len(cap.created) == 0, "new preference appearing does not create a device")
 
 
+def test_multiple_devices() -> None:
+    # 센서 3대: IP·Local Key·값이 각각 다르고, 기기마다 자기 센서만 조회
+    fakes = {"192.168.0.50": T.FakeTuya(SAMPLE_DPS),
+             "192.168.0.51": T.FakeTuya({**SAMPLE_DPS, "2": 1500}, b"fedcba9876543210"),
+             "192.168.0.52": T.FakeTuya({**SAMPLE_DPS, "2": 2500}, b"0123456789ABCDEF")}
+
+    class Router:  # connect할 때 IP로 가짜 센서를 고른다
+        sock = None
+
+        def settimeout(self, t):
+            pass
+
+        def connect(self, ip, port):
+            self.sock = fakes[ip.decode() if isinstance(ip, bytes) else ip].factory()
+            return self.sock.connect(ip, port)
+
+        def send(self, d):
+            return self.sock.send(d)
+
+        def receive(self, n):
+            return self.sock.receive(n)
+
+        def close(self):
+            if self.sock:
+                self.sock.close()
+
+    cap = load_driver(Router)
+    drv = cap.driver
+    devices = []
+    for i, (ip, fake) in enumerate(fakes.items(), 1):
+        d = cap.new_device(prefs(ipAddress=ip, localKey=fake.key.decode()))
+        d.id, d.label = f"dev-{i}".encode(), ("공기질 센서" + ("" if i == 1 else f" {i}")).encode()
+        drv.devices[i] = d
+        drv.lifecycle_handlers.init(drv, d)
+        devices.append(d)
+    for d in devices:
+        cap.run_timers(d)
+    co2 = [d.latest[b"carbonDioxideMeasurement.carbonDioxide"] for d in devices]
+    T.check(co2 == [803, 1500, 2500] and all(d.state == b"online" for d in devices), f"each polls its own sensor {co2}")
+    T.check(all(len(d.timers) == 2 for d in devices), "each device has its own timers")
+    # 한 대가 끊겨도 나머지는 그대로
+    fakes["192.168.0.51"].reachable = False
+    refresh = drv.capability_handlers[b"refresh"][b"refresh"]
+    for _ in range(3):
+        for d in devices:
+            refresh(drv, d)
+    T.check([d.state for d in devices] == [b"online", b"offline", b"online"], "one offline sensor does not affect others")
+    # 설정 쓰기와 보정은 그 기기에만
+    info_changed(drv, devices[2], co2Alarm="900", humidityCorrection=-5)
+    T.check(fakes["192.168.0.52"].writes == [{"26": 900}] and not fakes["192.168.0.50"].writes, "write goes to its sensor")
+    humidity = [d.latest[b"relativeHumidityMeasurement.humidity"] for d in devices]
+    T.check(humidity == [61, 61, 56], f"correction applies to its device only {humidity}")
+    # 3대가 있어도 주변 기기 검색으로는 만들지 않고, 어느 기기의 스위치로든 '공기질 센서 4'를 만든다
+    drv.discovery(drv, None, lambda: True)
+    T.check(len(cap.created) == 0, "discovery does not add with three devices")
+    info_changed(drv, devices[1], addDevice=True)
+    T.check(len(cap.created) == 1 and cap.created[1].label.decode() == "공기질 센서 4", "switch adds fourth device")
+
+
 def test_polling_fake_device() -> None:
     dev = T.FakeTuya(SAMPLE_DPS)
     cap = load_driver(dev.factory)
@@ -376,7 +435,7 @@ def main() -> int:
     ap.add_argument("--live", action="store_true")
     ap.add_argument("--ip", default="192.168.0.7")
     args = ap.parse_args()
-    for t in (test_dpmap, test_lifecycle_unconfigured, test_add_device, test_polling_fake_device):
+    for t in (test_dpmap, test_lifecycle_unconfigured, test_add_device, test_multiple_devices, test_polling_fake_device):
         t()
         print(f"{t.__name__}: ok")
     if args.live:
