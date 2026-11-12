@@ -1,5 +1,5 @@
 -- 허브는 Tuya 탐색 포트(UDP 6666/6667/7000)를 bind할 수 없어서 기기를 스스로 찾지 못한다.
--- "주변 기기 검색"이나 기기 설정의 "새 기기 추가" 때 설정 전 자리표시자 기기를 하나 만들고,
+-- 처음 "주변 기기 검색" 때와 기기 설정의 "새 기기 추가" 때 설정 전 자리표시자 기기를 하나 만들고,
 -- 사용자가 설정에서 IP와 Local Key를 넣는다.
 
 local log = require "log"
@@ -77,7 +77,13 @@ function M.add_placeholder(driver)
   return true
 end
 
+-- 주변 기기 검색은 앱에서 다른 기기를 찾을 때도 허브의 모든 드라이버에 불린다.
+-- 그래서 기기가 하나도 없을 때(처음 설치)만 만들고, 두 번째부터는 기기 설정의 "새 기기 추가"로 만든다
 function M.handle(driver, _opts, _should_continue)
+  if #driver:get_devices() > 0 then
+    log.debug("discovery: 기기가 이미 있어서 만들지 않음 (추가는 기기 설정의 새 기기 추가)")
+    return
+  end
   M.add_placeholder(driver)
 end
 

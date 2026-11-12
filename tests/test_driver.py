@@ -213,6 +213,12 @@ def test_lifecycle_unconfigured() -> None:
     drv.devices[1] = d
     drv.discovery(drv, None, lambda: True)
     T.check(len(cap.created) == 1, "discovery skips while placeholder unconfigured")
+    # 설정을 마친 기기만 있어도 주변 기기 검색으로는 더 만들지 않음 (다른 기기를 찾을 때도 불리므로)
+    configured = cap.new_device(prefs(ipAddress="192.168.0.50", localKey=T.LOCAL_KEY.decode()))
+    drv.devices[1] = configured
+    drv.discovery(drv, None, lambda: True)
+    T.check(len(cap.created) == 1, "discovery does not add a device when one already exists")
+    drv.devices[1] = d
     # 설정 전 기기: init은 supported values만 보내고 조회 타이머를 걸지 않음
     drv.lifecycle_handlers.init(drv, d)
     drv.lifecycle_handlers.added(drv, d)
