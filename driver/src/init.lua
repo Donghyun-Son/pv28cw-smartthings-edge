@@ -145,9 +145,9 @@ local function info_changed(driver, device, _, args)
   local old = (args and args.old_st_store and args.old_st_store.preferences) or {}
   local new = device.preferences
 
-  -- "새 기기 추가" 스위치: 켜짐/꺼짐과 상관없이 바뀔 때마다 기기를 하나 만든다.
-  -- 기기를 처음 만들거나 드라이버 업데이트로 설정이 새로 생길 때(old가 nil)는 무시한다
-  if old.addDevice ~= nil and new.addDevice ~= nil and old.addDevice ~= new.addDevice then
+  -- "새 기기 추가" 스위치: 꺼짐 → 켜짐일 때만 기기를 하나 만든다. 한 대 더 만들려면 껐다가 다시 켠다.
+  -- 기기를 처음 만들거나 드라이버 업데이트로 설정이 새로 생길 때는 old가 nil이라 만들지 않는다
+  if old.addDevice == false and new.addDevice == true then
     discovery.add_placeholder(driver)
   end
 

@@ -8,7 +8,7 @@ local M = {}
 
 local BASE_LABEL = "공기질 센서"
 -- try_create_device는 비동기라 만든 기기가 get_devices에 바로 나오지 않는다.
--- 그 사이에 다시 요청해도(스위치를 켰다 바로 끔 등) 하나만 만들도록 이 시간 동안 기다린다
+-- 그 사이에 다시 요청해도(스위치를 껐다가 바로 다시 켬 등) 하나만 만들도록 이 시간 동안 기다린다
 local PENDING_SECONDS = 60
 local pending -- { dni =, at = } 만들기를 요청했지만 아직 get_devices에 나오지 않은 기기
 

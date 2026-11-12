@@ -246,19 +246,23 @@ def test_add_device() -> None:
     d1 = cap.new_device(prefs(ipAddress="192.168.0.50", localKey=T.LOCAL_KEY.decode()))
     d1.label = "공기질 센서".encode()
     drv.devices[1] = d1
-    # "새 기기 추가" 스위치를 바꾸면 설정 전 기기를 하나 만들고, 이름이 겹치지 않게 번호를 붙임
+    # "새 기기 추가" 스위치를 켜면 설정 전 기기를 하나 만들고, 이름이 겹치지 않게 번호를 붙임
     info_changed(drv, d1, addDevice=True)
     T.check(len(cap.created) == 1 and cap.created[1].label.decode() == "공기질 센서 2"
             and cap.created[1].profile == b"pv28cw-air-monitor", "add device switch creates numbered placeholder")
     T.check(len(d1.timers) == 0, "add device switch does not restart polling")
-    # 바로 다시 꺼도(만든 기기가 아직 목록에 없음) 하나만 만듦
+    # 끌 때는 만들지 않음
     info_changed(drv, d1, addDevice=False)
+    T.check(len(cap.created) == 1, "turning the switch off does not create")
+    # 껐다가 바로 다시 켜도(만든 기기가 아직 목록에 없음) 하나만 만듦
+    info_changed(drv, d1, addDevice=True)
     T.check(len(cap.created) == 1, "no duplicate while creation is pending")
     # 만든 기기가 목록에 나온 뒤에도 설정하기 전까지는 더 만들지 않음
     d2 = cap.new_device(prefs())
     d2.label = cap.created[1].label
     d2.device_network_id = cap.created[1].device_network_id
     drv.devices[2] = d2
+    info_changed(drv, d1, addDevice=False)
     info_changed(drv, d1, addDevice=True)
     T.check(len(cap.created) == 1, "no new device while one is unconfigured")
     # 새 기기를 설정하면 어느 기기의 스위치로든 하나 더 만들 수 있음
@@ -268,7 +272,9 @@ def test_add_device() -> None:
     T.check(cap.created[1].device_network_id != cap.created[2].device_network_id, "unique network ids")
     # 만든 기기가 끝내 나오지 않으면(생성 실패) 60초 뒤에는 다시 만들 수 있음
     info_changed(drv, d2, addDevice=False)
+    info_changed(drv, d2, addDevice=True)
     T.check(len(cap.created) == 2, "still pending")
+    info_changed(drv, d2, addDevice=False)
     lua.execute("_REAL_TIME = os.time; os.time = function() return _REAL_TIME() + 61 end")
     try:
         info_changed(drv, d2, addDevice=True)
@@ -286,6 +292,9 @@ def test_add_device() -> None:
         args = lua.table_from({b"old_st_store": lua.table_from({b"preferences": old})})
         drv.lifecycle_handlers.infoChanged(drv, d, b"infoChanged", args)
     T.check(len(cap.created) == 0, "new preference appearing does not create a device")
+    # 켜 둔 채로 드라이버를 업데이트한 뒤 끄는 것도 만들지 않음
+    info_changed(drv, d, addDevice=False)
+    T.check(len(cap.created) == 0, "switching off from on does not create")
 
 
 def test_multiple_devices() -> None:
